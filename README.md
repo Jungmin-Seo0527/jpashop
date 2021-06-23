@@ -157,4 +157,26 @@ public class HelloController {
 > `spring-boot-devtools`라이브러리를 추가하면, `.html`파일을 컴파일만 해주면 서버 재시작 없이 View 파일 변경이 가능하다.    
 > 인텔리제이 컴파일 방법: 메뉴 build -> Recompile
 
+### 1-4. H2 데이터베이스 설치
+
+> **주의!!!**
+> **Version 1.4 200 사용 필수!!!**
+
+* 1.4.200 버전 다운로드 링크
+    * 윈도우 설치 버전: https://h2database.com/h2-setup-2019-10-14.exe
+    * 윈도우, 맥, 리눅스 실행 버전: http://h2database.com/h2-2019-10-14.zip
+
+* https://www.h2database.com
+* 다운로드 및 설치
+* 데이터베이스 파일 생성 방법
+    * `jdbc:h2:~/jpashop`(최소 한번)
+    * `~/jpashop.mv.db`파일 생성 확인
+    * 이후부터는 `jdbc:h2:tcp://localhost/~/jpashop`이렇게 접속
+
+> 처음 H2를 설치하고 실행할 때 bin 폴더에 있는 build.bat 파일을 실행해야 한다.     
+> H2 폴더에도 build.bat 파일이 존재하지만 실행해도 아무런 일도 일어나지 않는다. 꼭 bin 폴더의 build.bat 파일을 실행하자.
+
+> 주의    
+> H2 데이터베이스의 MVCC 옵션은 H2 1.4.198 부터 제거되었다. **1.4.200 버전에서는 MVCC 옵션을 사용하면 오류가 발생**
+
 ## Note
