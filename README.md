@@ -1,3 +1,12 @@
+# TIL
+
+## 1. 프로젝트 환경설정
+
+### 1-1. 프로젝트 생성
+
+#### build.gradle
+
+```groovy
 plugins {
     id 'org.springframework.boot' version '2.5.1'
     id 'io.spring.dependency-management' version '1.0.11.RELEASE'
@@ -31,3 +40,7 @@ dependencies {
 test {
     useJUnitPlatform()
 }
+
+```
+
+## Note
