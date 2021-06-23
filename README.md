@@ -179,4 +179,206 @@ public class HelloController {
 > 주의    
 > H2 데이터베이스의 MVCC 옵션은 H2 1.4.198 부터 제거되었다. **1.4.200 버전에서는 MVCC 옵션을 사용하면 오류가 발생**
 
-## Note
+### 1-5. JPA와 DB 설정, 동작 확인
+
+#### application.yml
+
+* `src/main/resources/application.yml`
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:h2:tcp://localhost/~/jpashop;
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create
+    properties:
+      hibernate:
+        #        show_sql: true
+        format_sql: true
+
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+    org.hibernate.type: trace
+```
+
+* `spring.jpa.hibernate.ddl-auto`: create
+    * 이 옵션은 애플리케이션 실행 시점에 테이블을 drop 하고, 다시 생성한다.
+
+> 참고    
+> 모든 로그 출력은 가급적 로거를 통해 남겨야 한다.
+> `show_sql`: `System.out`에 하이버네이트 실행 SQL을 남긴다.
+> `org.hibernate.SQL`: logger를 통해 하이버네티트 실행 SQL을 남긴다.
+
+#### Member.java - 회원 엔티티
+
+* `src/main/java/jpabook/jpashop/Member.java`
+
+```java
+package jpabook.jpashop;
+
+import lombok.Getter;
+import lombok.Setter;
+
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.Id;
+
+@Entity
+@Getter
+@Setter
+public class Member {
+
+    @Id
+    @GeneratedValue
+    private Long id;
+    private String username;
+}
+
+```
+
+#### MemberRepository.java - 회원 저장소
+
+* `src/main/java/jpabook/jpashop/MemberRepository.java`
+
+```java
+package jpabook.jpashop;
+
+import org.springframework.stereotype.Repository;
+
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
+
+@Repository
+public class MemberRepository {
+
+    @PersistenceContext
+    private EntityManager em;
+
+    public Long save(Member member) {
+        em.persist(member);
+        return member.getId();
+    }
+
+    public Member find(Long id) {
+        return em.find(Member.class, id);
+    }
+}
+
+```
+
+#### MemberRepositoryTest.java - 회원 저장소 테스트 코드
+
+* `src/test/java/jpabook/jpashop/MemberRepositoryTest.java`
+
+```java
+package jpabook.jpashop;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.Rollback;
+import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.transaction.annotation.Transactional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@RunWith(SpringRunner.class)
+@SpringBootTest
+public class MemberRepositoryTest {
+
+    @Autowired
+    MemberRepository memberRepository;
+
+    @Test
+    @Transactional
+    @Rollback(false)
+    public void testMember() throws Exception {
+        // given
+        Member member = new Member();
+        member.setUsername("memberA");
+
+        // when
+        Long savedId = memberRepository.save(member);
+        Member findMember = memberRepository.find(savedId);
+
+        // then
+        assertThat(findMember.getId()).isEqualTo(member.getId());
+        assertThat(findMember.getUsername()).isEqualTo(member.getUsername());
+        assertThat(findMember).isEqualTo(member);
+    }
+}
+```
+
+> 주의!   
+> `@Test`는 JUnit4를 사용하면 `org.junit.Test`를 사용해야 한다. 만약 Junit5를 사용하면 그것에 맞게 사용하면 된다.
+
+* Entity, Repository 동작 확인
+
+> 오류사항 확인 필요!!!   
+> 1-5. JPA와 DB 설정, 동작 확인 MemberRepositoryTest 실행 오류
+
+#### 쿼리 파라미터 로그 남기기
+
+* 로그에 다음을 추가하기 `org.hibernate.type`: SQL 실행 파라미터를 로그로 남긴다.
+* 외부 라이브러리 사용
+    * https://github.com/gavlyukovskiy/spring-boot-data-source-decorator
+
+스프링 부트를 사용하면 이 라이브러리만 추가하면 된다.
+
+```groovy
+implementation 'com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.5.6'
+```
+
+> 참고    
+> 쿼리 파라미터를 로그로 남기는 외부 라이브러리는 시스템 자원을 사용하므로, 개발 단계에서는 편하게 사용해도 된다. 하지만 운영시스템에 적용하려면 꼭 성능테스트를 하고 사용하는 것이 좋다.
+
+## Note - 오류사항 정리
+
+***
+
+### 1-5. JPA와 DB 설정, 동작 확인 MemberRepositoryTest 실행 오류
+
+Junit4 내 스프링 2.5.1 은 디폴트로 Junit5 을 설치해준다. 강의에서는 JUnit4를 사용하니 따로 추가해주어야 한다.
+
+```groovy
+dependencies {
+    testImplementation("org.junit.vintage:junit-vintage-engine") {
+        exclude group: "org.hamcrest", module: "hamcrest-core"
+    }
+}
+```
+
+여기까지 와도 테스트 코드가 에러가 발생한다.
+
+```
+Access to DialectResolutionInfo cannot be null when 'hibernate.dialect' not set
+```
+
+hibernate를 찾지 못하는 에러인것 같은데...
+
+* `application.yml`
+    ```yaml
+    spring:
+      datasource:
+        url: jdbc:h2:tcp://localhost/~/jpashop;MVCC=TRUE
+        username: sa
+        password:
+        driver-class-name: org.h2.Driver
+    ```
+    * 설정 정보에서 `MVCC=TRUE`부분을 제거해주면 된다.
+    * 생략해도 상관 없지만 그냥 추가해 주었는데 생략과 표기가 큰 차이가 있는 듯 하다.
+
+`MemberRepositoryTest`코드를 실행하려면 H2 데이터베이스에 연결을 시킨 후에 실행해야 정상적으로 테스트를 통과할 수 있다.
+
+### 참고 블로그
+
+* [@SpringBootTest로 통합 테스트 하기](https://goddaehee.tistory.com/211)
+* [JPA 영속성 컨텍스트 특징](https://blog.baesangwoo.dev/posts/jpa-persistence-context/)
