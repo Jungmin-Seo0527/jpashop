@@ -12,22 +12,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
-public class MemberRepositoryTest {
+public class TempMemberRepositoryTest {
 
     @Autowired
-    MemberRepository memberRepository;
+    TempMemberRepository memberRepository;
 
     @Test
     @Transactional
     @Rollback(false)
     public void testMember() throws Exception {
         // given
-        Member member = new Member();
+        TempMember member = new TempMember();
         member.setUsername("memberA");
 
         // when
         Long savedId = memberRepository.save(member);
-        Member findMember = memberRepository.find(savedId);
+        TempMember findMember = memberRepository.find(savedId);
 
         // then
         assertThat(findMember.getId()).isEqualTo(member.getId());
