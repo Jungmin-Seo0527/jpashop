@@ -110,4 +110,50 @@ public class NotEnoughStockException extends RuntimeException {
 > `Item`에서 수량에 대한 변화는 Service계층에서 비즈니스 로직을 구현한 것이 아닌 도메인인 `Item`내에서 구현했다. 수량에 대한 필드인 `stockQuantity`의 변화를 Service 계층에서 구현하려면 `getStockQuantity`를 호출해서 `stockQuantity`를 수정해야 할 것이다.    
 > 이 방법 대신에 도메인에서 직접 `stockQuantity`에 대한 변화를 수행하는 비즈니스 로직을 구현했다. 굳이 Service 계층에서 `stockQuantity`를 `get`하지 않고 해당 메소드만 실행해 주면 된다. 이를 `도메인 주도 설계`라고 한다.
 
+### 5-2. 상품 리포지토리 개발
+
+#### ItemRepository.java
+
+* `src/main/java/jpabook/jpashop/repository/ItemRepository.java`
+
+```java
+package jpabook.jpashop.repository;
+
+import jpabook.jpashop.domain.item.Item;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+import javax.persistence.EntityManager;
+import java.util.List;
+
+@Repository
+@RequiredArgsConstructor
+public class ItemRepository {
+
+    private final EntityManager em;
+
+    public void save(Item item) {
+        if (item.getId() == null) {
+            em.persist(item);
+        } else {
+            em.merge(item);
+        }
+    }
+
+    public Item findOne(Long id) {
+        return em.find(Item.class, id);
+    }
+
+    public List<Item> findAll() {
+        return em.createQuery("select i from Item i", Item.class)
+                .getResultList();
+    }
+}
+
+```
+
+* `save()`
+    * `id`가 없으면 신규로 보고 `persist()`실행
+    * `id`가 있으면 이미 데이터베이스에 저장된 엔티티를 수정한다고 보고, `merget()`를 실행
+
 ## Note
