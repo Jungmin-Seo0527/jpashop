@@ -154,6 +154,49 @@ public class ItemRepository {
 
 * `save()`
     * `id`가 없으면 신규로 보고 `persist()`실행
-    * `id`가 있으면 이미 데이터베이스에 저장된 엔티티를 수정한다고 보고, `merget()`를 실행
+    * `id`가 있으면 이미 데이터베이스에 저장된 엔티티를 수정한다고 보고, `merge()`를 실행
+
+### 5-3. 상품 서비스 개발
+
+#### ItemService.java
+
+* `src/main/java/jpabook/jpashop/service/ItemService.java`
+
+```java
+package jpabook.jpashop.service;
+
+import jpabook.jpashop.domain.item.Item;
+import jpabook.jpashop.repository.ItemRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@Transactional(readOnly = true)
+@RequiredArgsConstructor
+public class ItemService {
+
+    private final ItemRepository itemRepository;
+
+    @Transactional
+    public void saveItem(Item item) {
+        itemRepository.save(item);
+    }
+
+    public List<Item> findItem() {
+        return itemRepository.findAll();
+    }
+
+    public Item findOne(Long itemId) {
+        return itemRepository.findOne(itemId);
+    }
+}
+
+```
+
+* 상품 서비스는 상품 리포지토리에 단순히 위임만 하는 클래스
+* 때로는 Controller계층에서 직접 Repository에 접근해서 Service계층에서 수행하는 일들을 해도 되지 않을까 하는 생각이 든다.
 
 ## Note
