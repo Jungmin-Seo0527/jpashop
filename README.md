@@ -191,7 +191,7 @@ public class OrderRepository {
 
 주문 리포지토리에는 주문 엔티티를 저장하고 검색하는 기능이 있다. 마지막의 `findAll(OrderSearch orderSearch)`메서드는 조금 뒤에 있는 주문 검색 기능에서 자세히 알아본다.
 
-6-3. 주문 서비스 개발
+### 6-3. 주문 서비스 개발
 
 #### OrderService.java
 
@@ -289,7 +289,7 @@ public class OrderService {
 > 이전에 읽었던 이동욱님의 책을 참고하자면    
 > 서비스 메소드는 **트랜잭션과 도메인 간의 순서만 보장**해준다. 즉 핵심 비즈니스 로직은 도메인, 그 핵심 비즈니스로직을 단순히 요청을 하는 것이 서비스 계층에서 하는 일이다.
 
-#### 6-4. 주문 기능 테스트
+### 6-4. 주문 기능 테스트
 
 **테스트 요구사항**
 
@@ -406,5 +406,115 @@ public class OrderServiceTest {
     }
 }
 ```
+
+### 6-5. 주문 검색 기능 개발
+
+JPA에서 **동적 쿼리**를 어떻게 해결하는가?
+
+#### OrderSearch.java - 검색 조건 파라미터
+
+* `src/main/java/jpabook/jpashop/repository/OrderSearch.java`
+
+```java
+package jpabook.jpashop.repository;
+
+import jpabook.jpashop.domain.OrderStatus;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter @Setter
+public class OrderSearch {
+
+    private String memberName;
+    private OrderStatus orderStatus;
+}
+
+```
+
+#### OrderRepository.java (추가) - 검색을 추가한 리포지토리 코드(JPQL로 처리)
+
+```java
+package jpabook.jpashop.repository;
+
+import jpabook.jpashop.domain.Order;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+import org.springframework.util.StringUtils;
+
+import javax.persistence.EntityManager;
+import javax.persistence.TypedQuery;
+import javax.persistence.criteria.*;
+import java.util.ArrayList;
+import java.util.List;
+
+@Repository
+@RequiredArgsConstructor
+public class OrderRepository {
+
+    // ...
+
+    /**
+     * 회원 이름으로 주문 내역 검색
+     *
+     * @return em.createQuery(" select o from Order o join o.member m " + < br >
+     * " where o.status = :status " + <br>
+     * " and m.name like :name", Order.class) <br>
+     * .setParameter("status", orderSearch.getOrderStatus()) <br>
+     * .setParameter("name", orderSearch.getMemberName()) <br>
+     * .setMaxResults(1000) <br>
+     * .getResultList();
+     */
+
+    public List<Order> findAllByString(OrderSearch orderSearch) {
+        String jpql = "select o from Order o join o.member m";
+        boolean isFirstCondition = true;
+
+        if (orderSearch.getOrderStatus() != null) {
+            if (isFirstCondition) {
+                jpql += " where";
+                isFirstCondition = false;
+            } else {
+                jpql += " and";
+            }
+            jpql += " o.status = :status";
+        }
+
+        if (StringUtils.hasText(orderSearch.getMemberName())) {
+            if (isFirstCondition) {
+                jpql += " where";
+                isFirstCondition = false;
+            } else {
+                jpql += " and";
+            }
+            jpql += " m.name like :name";
+        }
+
+        TypedQuery<Order> query = em.createQuery(jpql, Order.class)
+                .setMaxResults(1000);
+
+        if (orderSearch.getOrderStatus() != null) {
+            query = query.setParameter("status", orderSearch.getOrderStatus());
+        }
+        if (StringUtils.hasText(orderSearch.getMemberName())) {
+            query = query.setParameter("name", orderSearch.getMemberName());
+        }
+
+        return query.getResultList();
+    }
+}
+
+```
+
+> MTH   
+> 동적쿼리란 위의 예를 보면 Order엔티티와 Member엔티티를 조인을 시킨 후에 원하는 주문 상태와 이름에 맞는 컬럼을 select 하려고 한다.    
+> 하지만 종종 status 혹은 name이 null값인 경우가 있다. 이러한 경우에는 쿼리문이 바뀌게 된다.   
+> 만약 `status`값이 `null`값이라면 `select o from Order o join o.member m where m.name like :name`이 될것이다.     
+> 반대로 `name`값이 null값인 경우도 존재한다.   
+> `select o from Order o join o.member m where m.status = :status`    
+> 이런 식으로 쿼리문이 현재 상태에 따라 바뀔 가능성이 있을 때는 조건에 맞도록 쿼리문이 수정되는 동적 쿼리를 사용해야 한다.
+>
+> JPQL에서는 쿼리문에 해당하는 String을 조건에 따라 조립을 한 후에 완성된 쿼리문에 따라서 파라미터도 조립을 한 후에 만들어진 쿼리문으로 원하는 데이터롤 조회해서 반환한다.
+>
+> 참고로 후에 JPQL로 처리하는 동적쿼리나, 바로 다음에 나오는 JPA Criteria로 동적 쿼리를 처리하는 방법은 실무에서는 사용 불가하다고 한다. 해결법은 `Querydsl`이 제시했다. 이번 장에서는 우선 `Querydsl`이 아닌 방법으로 동적 쿼리를 다룬다.
 
 ## Note
