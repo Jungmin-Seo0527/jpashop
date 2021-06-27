@@ -1,6 +1,7 @@
 package jpabook.jpashop.domain;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import javax.persistence.*;
@@ -8,12 +9,14 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import static javax.persistence.CascadeType.*;
-import static javax.persistence.FetchType.*;
+import static javax.persistence.CascadeType.ALL;
+import static javax.persistence.FetchType.LAZY;
+import static lombok.AccessLevel.PROTECTED;
 
 @Entity
 @Table(name = "orders")
 @Getter @Setter
+@NoArgsConstructor(access = PROTECTED)
 public class Order {
 
     @Id @GeneratedValue
