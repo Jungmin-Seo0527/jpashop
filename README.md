@@ -157,4 +157,38 @@ public class OrderItem {
 * `getTotalPrice()`: 주문 가격 조회
     * 주문 가격에 수량을 곱한 값을 반환한다.
 
+### 6-2. 주문 리포지토리 개발
+
+#### OrderRepository.java
+
+* `src/main/java/jpabook/jpashop/repository/OrderRepository.java`
+
+```java
+package jpabook.jpashop.repository;
+
+import jpabook.jpashop.domain.Order;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+import javax.persistence.EntityManager;
+
+@Repository
+@RequiredArgsConstructor
+public class OrderRepository {
+
+    private final EntityManager em;
+
+    public void save(Order order) {
+        em.persist(order);
+    }
+
+    public Order findOne(Long id) {
+        return em.find(Order.class, id);
+    }
+}
+
+```
+
+주문 리포지토리에는 주문 엔티티를 저장하고 검색하는 기능이 있다. 마지막의 `findAll(OrderSearch orderSearch)`메서드는 조금 뒤에 있는 주문 검색 기능에서 자세히 알아본다.
+
 ## Note
