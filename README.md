@@ -1,6 +1,6 @@
 # TIL
 
-## 웹 계층 개발
+## 7. 웹 계층 개발
 
 * 홈 화면
 * 회원 기능
@@ -254,5 +254,139 @@ body {
 ```
 
 * 인텔리제이에서는 css 파일 지원이 안된다.
+
+### 7-2. 회원 등록
+
+* 폼 객체를 사용해서 화면 계층과 서비스 계층을 명확하게 분리한다.
+
+#### MemberForm.java - 회원 등록 폼 객체
+
+* `src/main/java/jpabook/jpashop/controller/MemberForm.java`
+
+```java
+package jpabook.jpashop.controller;
+
+import lombok.Getter;
+import lombok.Setter;
+
+import javax.validation.constraints.NotEmpty;
+
+@Getter @Setter
+public class MemberForm {
+
+    @NotEmpty(message = "회원 이름은 필수 입니다")
+    private String name;
+
+    private String city;
+    private String street;
+    private String zipcode;
+}
+
+```
+
+#### MemberController.java - 회원 등록 컨트롤러
+
+* `src/main/java/jpabook/jpashop/controller/MemberController.java`
+
+```java
+package jpabook.jpashop.controller;
+
+import jpabook.jpashop.domain.Address;
+import jpabook.jpashop.domain.Member;
+import jpabook.jpashop.service.MemberService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+
+import javax.validation.Valid;
+
+@Controller
+@RequiredArgsConstructor
+public class MemberController {
+
+    private final MemberService memberService;
+
+    @GetMapping("/members/new")
+    public String createForm(Model model) {
+        model.addAttribute("memberForm", new MemberForm());
+        return "members/createMemberForm";
+    }
+
+    @PostMapping("/members/new")
+    public String create(@Valid MemberForm form, BindingResult result) {
+
+        if (result.hasErrors()) {
+            return "members/createMemberForm";
+        }
+
+        Address address = new Address(form.getCity(), form.getStreet(), form.getZipcode());
+
+        Member member = new Member();
+        member.setName(form.getName());
+        member.setAddress(address);
+
+        memberService.join(member);
+        return "redirect:/";
+    }
+}
+
+```
+
+#### createMemberForm.html - 회원 등록 폼 화면
+
+* `src/main/resources/templates/members/createMemberForm.html`
+
+```html
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="fragments/header :: header"/>
+<style>
+ .fieldError {
+ border-color: #bd2130;
+ }
+</style>
+<body>
+<div class="container">
+    <div th:replace="fragments/bodyHeader :: bodyHeader"/>
+    <form role="form" action="/members/new" th:object="${memberForm}" method="post">
+        <div class="form-group">
+            <label th:for="name">이름</label>
+            <input type="text" th:field="*{name}" class="form-control"
+                   placeholder="이름을 입력하세요"
+                   th:class="${#fields.hasErrors('name')}? 'form-control fieldError' : 'form-control'">
+            <p th:if="${#fields.hasErrors('name')}"
+               th:errors="*{name}">Incorrect date</p>
+        </div>
+        <div class="form-group">
+            <label th:for="city">도시</label>
+            <input type="text" th:field="*{city}" class="form-control" placeholder="도시를 입력하세요">
+        </div>
+        <div class="form-group">
+            <label th:for="street">거리</label>
+            <input type="text" th:field="*{street}" class="form-control"
+                   placeholder="거리를 입력하세요">
+        </div>
+        <div class="form-group">
+            <label th:for="zipcode">우편번호</label>
+            <input type="text" th:field="*{zipcode}" class="form-control"
+                   placeholder="우편번호를 입력하세요">
+        </div>
+        <button type="submit" class="btn btn-primary">Submit</button>
+    </form>
+    <br/>
+    <div th:replace="fragments/footer :: footer"/>
+</div> <!-- /container -->
+</body>
+</html>
+```
+
+> MTH   
+> 타임리프는 문법이 참 어렵다. 토이 프로젝트를 진행중인데 머스테치를 쓸까 고민중이다.   
+> 인텔리제이 커뮤니티 버전은 타임리프를 지원하지 않아서 작성도 불편한데...     
+> 그래도 제일 많이 사용되는 서버 사이트 뷰 템플릿인데... 제일 인기가 많은 이유가 분명 있을텐데... 고민이다...   
+> 그나저나 전체 줄 정렬를 할때 마다 css의 다음 빈줄이 계속 한줄씩 늘어난다. 
 
 ## Note
