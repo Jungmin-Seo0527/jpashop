@@ -112,4 +112,94 @@ public class MemberApiController {
 > 참고    
 > 실무에서는 엔티티를 API 스펙에 노출하면 안된다!!!
 
+### 8-2. 회원 수정 API
+
+#### MemberApiController.java (추가) - 회원 수정 API
+
+```java
+package jpabook.jpashop.api;
+
+import jpabook.jpashop.domain.Member;
+import jpabook.jpashop.service.MemberService;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+import javax.validation.constraints.NotEmpty;
+
+@RestController
+@RequiredArgsConstructor
+public class MemberApiController {
+
+    private final MemberService memberService;
+
+    // ...
+
+    @PutMapping("/api/v2/members/{id}")
+    public UpdateMemberResponse updateMemberV2(
+            @PathVariable("id") Long id,
+            @RequestBody @Valid UpdateMemberRequest request) {
+
+        memberService.update(id, request.getName());
+        Member findMember = memberService.findOne(id);
+        return new UpdateMemberResponse(findMember.getId(), findMember.getName());
+    }
+
+    @Data
+    @AllArgsConstructor
+    static class UpdateMemberResponse {
+
+        private Long id;
+        private String name;
+    }
+
+    @Data
+    static class UpdateMemberRequest {
+
+        private String name;
+    }
+}
+
+```
+
+* 회원 수정도 DTO를 요청 파라미터에 매핑
+
+#### MemberService.java (추가) - 회원 수정 메서드 추가
+
+```java
+package jpabook.jpashop.service;
+
+import jpabook.jpashop.domain.Member;
+import jpabook.jpashop.repository.MemberRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@Transactional(readOnly = true)
+@RequiredArgsConstructor
+public class MemberService {
+
+    private final MemberRepository memberRepository;
+
+    // ...
+
+    @Transactional
+    public void update(Long id, String name) {
+        Member member = memberRepository.findOne(id);
+        member.setName(name);
+    }
+}
+
+```
+
+* 변경 감지를 사용해서 데이터를 수정
+
+> 오류정정    
+> 회원 수정 API `updateMemberV2`은 회원 정보를 부분 업데이트 한다. 여기서 PUT 방식을 사용했는데, PUT은 전체 업데이트를 할 때 사용하는 것이 맞다. 부분 업데이트를 하려면 PATCH를 사용하거나 POST를 사용하는 것이 REST 스타일에 맞다.
+
 ## Note
