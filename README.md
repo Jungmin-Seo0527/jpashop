@@ -202,4 +202,109 @@ public class MemberService {
 > 오류정정    
 > 회원 수정 API `updateMemberV2`은 회원 정보를 부분 업데이트 한다. 여기서 PUT 방식을 사용했는데, PUT은 전체 업데이트를 할 때 사용하는 것이 맞다. 부분 업데이트를 하려면 PATCH를 사용하거나 POST를 사용하는 것이 REST 스타일에 맞다.
 
+### 8-3. 회원 조회 API
+
+#### MemberApiController.java (추가) - 회원조회V1: 응답 값으로 엔티티를 직접 외부에 노출
+
+```java
+package jpabook.jpashop.api;
+
+import jpabook.jpashop.domain.Member;
+import jpabook.jpashop.service.MemberService;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+import javax.validation.constraints.NotEmpty;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequiredArgsConstructor
+public class MemberApiController {
+
+    private final MemberService memberService;
+
+    @GetMapping("/api/v1/members")
+    public List<Member> membersV1() {
+        return memberService.findMembers();
+    }
+
+    // ...
+}
+
+```
+
+* 문제점
+    * 엔티티에 프레젠테이션 계층을 위한 로직이 추가된다.
+    * 기본적으로 엔티티의 모든 값이 노출된다.
+    * 응답 스펙을 맞추기 위해 로직이 추가된다. (@JsonIgnore, 별도의 뷰 로직 등등)
+    * 실무에서는 같은 엔티티에 대해 API가 용도에 따라 다양하게 만들어지는데, 한 엔티티에 각각의 API를 위한 프레젠테이션 응답 로직을 담기는 어렵다.
+    * 엔티티가 변경되면 API 스펙이 변한다.
+    * 추가로 컬렉션을 직접 반환하면 향후 API 스펙을 변경하기 어렵다. (별도의 Result 클래스 생성으로 해결)
+
+* 결론
+    * API 응답 스펙에 맞추어 별도의 DTO를 반환한다.
+
+> 참고: 엔티티를 외부에 노출하지 말자!!!   
+> 실무에서는 `member`엔티티의 데이터가 필요한 API가 계속 증가하게 된다. 어떤 API는 `name`필드가 필요하지만, 어떤 API는 `name`필드가 필요없을 수 있다. 결론적으로 엔티티 대신에 API 스펙에 맞는 별도의 DTO를 노출해야 한다.
+
+#### MemberApiController.java - 회원조회V2: 응답 값으로 엔티티가 아닌 별도의 DTO 사용
+
+```java
+package jpabook.jpashop.api;
+
+import jpabook.jpashop.domain.Member;
+import jpabook.jpashop.service.MemberService;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+import javax.validation.constraints.NotEmpty;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequiredArgsConstructor
+public class MemberApiController {
+
+    private final MemberService memberService;
+
+    // ...
+
+    @GetMapping("/api/v2/members")
+    public Result memberV2() {
+        List<Member> findMembers = memberService.findMembers();
+        List<MemberDto> collect = findMembers.stream()
+                .map(m -> new MemberDto(m.getName()))
+                .collect(Collectors.toList());
+
+        return new Result(collect);
+    }
+
+    @Data
+    @AllArgsConstructor
+    static class Result<T> {
+        private T data;
+    }
+
+    @Data
+    @AllArgsConstructor
+    static class MemberDto {
+        private String name;
+    }
+
+    // ...
+}
+
+```
+
+* 엔티티를 DTO로 변환해서 반환한다.
+* 엔티티가 변해도 API 스펙이 변경되지 않는다.
+* 추가로 `Result`클래스로 컬렉션을 감싸서 향후 필요한 필드를 추가할 수 있다.
+
 ## Note
