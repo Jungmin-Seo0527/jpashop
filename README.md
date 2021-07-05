@@ -326,4 +326,92 @@ public class OrderRepository {
 > 그리고 생성자에서 필요로 하는 데이터는 모두 영속성 컨텍스트에 존재하기 때문에 더이상의 쿼리문은 필요하지 않다.       
 > 이 방법을 이용하면 이전의 5번의 쿼리문이 1번의 쿼리문으로 바뀌므로 성능이 개선된다.
 
+### 10-4. 간단한 주문 조회 V4: JPA에서 DTO로 바로 조회
+
+#### OrderSimpleQueryRepository.java - 조회 전용 리포지토리
+
+* `src/main/java/jpabook/jpashop/repository/order/simplequery/OrderSimpleQueryRepository.java`
+
+```java
+package jpabook.jpashop.repository.order.simplequery;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+import javax.persistence.EntityManager;
+import java.util.List;
+
+@Repository
+@RequiredArgsConstructor
+public class OrderSimpleQueryRepository {
+
+    private final EntityManager em;
+
+    public List<OrderSimpleQueryDto> findOrderDtos() {
+        return em.createQuery(
+                "select new jpabook.jpashop.repository.order.simplequery.OrderSimpleQueryDto(o.id, m.name, o.orderDate, o.status, d.address)  " +
+                        " from Order o" +
+                        " join o.member m" +
+                        " join o.delivery d", OrderSimpleQueryDto.class)
+                .getResultList();
+    }
+}
+
+```
+
+#### OrderSimpleQueryDto.java - 리포지토리에서 DTO 직접 조회
+
+* `src/main/java/jpabook/jpashop/repository/order/simplequery/OrderSimpleQueryDto.java`
+
+```java
+package jpabook.jpashop.repository.order.simplequery;
+
+import jpabook.jpashop.domain.Address;
+import jpabook.jpashop.domain.OrderStatus;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+public class OrderSimpleQueryDto {
+    private Long orderId;
+    private String name;
+    private LocalDateTime orderDate;
+    private OrderStatus orderStatus;
+    private Address address;
+
+    public OrderSimpleQueryDto(Long orderId, String name, LocalDateTime orderDate, OrderStatus orderStatus, Address address) {
+        this.orderId = orderId;
+        this.name = name;
+        this.orderDate = orderDate;
+        this.orderStatus = orderStatus;
+        this.address = address;
+    }
+}
+
+```
+
+* 일반적인 SQL을 사용할 때 처럼 원하는 값을 선택해서 조회
+* `new`명령어를 사용해서 JPQL의 결과를 DTO로 즉시 변환
+* SELECT절에서 원하는 데이터를 직접 선택하므로 DB -> 애플리케이션 네트웍 용량 최적화(생각보다 미비)
+* 리포지토리 재사용성 떨어짐, API 스펙에 맞춘 코드가 리포지토리에 들어가는 단점
+
+#### 정리
+
+엔티티를 DTO로 변환하거나, DTO로 바로 조회하는 두가지 방법은 각각 장단점이 있다. 둘중 상황에 따라서 더 나은 방법을 선택하면 된다. 엔티티로 조회하면 리포지토리 재사용성도 좋고, 개발도 단순해진다. 따라서
+권장하는 방법은 다음과 같다.
+
+##### 쿼리 방식 선택 권장 순서
+
+1. 우선 엔티티를 DTO로 변환하는 방법을 선택한다.
+2. 필요하면 페치 조인으로 성능을 최적화 한다. -> 대부분의 성능 이슈가 해결된다.
+3. 그래도 안되면 DTO로 직접 조회하는 방법을 사용한다.
+4. 최후의 방법은 JPA가 제공하는 네이티브 SQL이나 스프링 JDBC Template을 사용해서 SQL을 직접 사용한다.
+
+> MTH       
+> `OrderSimpleQueryDto`는 API 스펙에 종속적인 DTO이다. 오로직 API를 위해서 Entity중 필요한 데이터만 뽑는 객체이다. 처음부터 `OrderRepository`에서 `OrderSimpleQueryDto`가 가진 데이터만 조회하려면 위와 같이 `new`를 이용해서 쿼리문을 직접 작성한다.       
+> 그런데 만약 `OrderRepository`객체에 위의 과정을 수행하는 메소드가 존재한다면 `repository`계층이 `controller`계층에 종속적이게 된다. 정확하게 말하면 `repository`가 API에 종속적이게 된다. 이는 별로 좋은 코드가 아니다.
+>
+> 따라서 API에 종속적인 DTO를 바로 조회하는 메소드를 모아서 따로 `repository`객체를 생성한다. 그것이 `OrderSimpleQueryRepository`이다. 이 객체에는 이후에 API 혹은 DTO에 종속적인 조회를 모아둔다. (아마 이 방법이 가장 널리 쓰이는 듯 하다.)
+
 ## Note
