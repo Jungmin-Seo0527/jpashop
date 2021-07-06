@@ -255,4 +255,147 @@ public class OrderRepository {
 > 페이징에 관련되서는 아마 다음 수업에 더 자세하게, 그리고 해결법도 나올것이라 예상한다.     
 > 기본적으로 내가 페이징을 할 줄 몰라서 이해하는데 쉽지 않았던 수업이었다.
 
+### 11-4. 주문 조회 V3.1: 엔티티를 DTO로 변환 - 페이징과 한계 돌파
+
+* 컬렉션을 페치 조인하면 페이징이 불가능하다.
+    * 컬렉션을 페치 조인하면 일대다 조인이 발생하므로 데이터가 예측할 수 없이 증가한다.
+    * 일대다에서 일을 기준으로 페이징을 하는 것이 목적이다. 그런데 데이터는 다(N)을 기준으로 row가 생성된다.
+    * Order를 기준으로 페이징 하고 싶은데, 다(N)인 `OrderItem`을 조인하면 `OrderItem`이 기준이 되어버린다.
+    * 이 경우 하이버네이트는 경고 로그를 남기고 모든 DB 데이터를 읽어서 메모리에서 페이징을 시도한다. 최악의 경우 장애로 이어질 수 있다.
+
+* 한계 돌파
+    * 그러면 페이징 + 컬렉션 엔티티를 함께 조회하려면 어떻게 해야할까?
+    * 먼저 **ToOne**(OneToOne, ManyToOne)관계를 모두 페치조인 한다. ToOne관계는 row수를 증가시키지 않으므로 페이징 쿼리에 영향을 주지 않는다.
+    * 컬렉션은 지연 로딩으로 조회한다.
+    * 지연 로딩 성능 최적화를 위해 `hibernate.default_batch_fetch_size`, `@BatchSize`를 적용한다.
+        * `hibernate.default_batch_fetch_size`: 글로벌 설정
+        * `@BatchSize`: 개별 최적화
+        * 이 옵션을 사용하면 컬렉션이나, 프록시 객체를 한꺼번에 설정한 size만큼 IN 쿼리로 조회한다.
+
+#### OrderRepository.java (추가) - `findAllWithMemberDelivery(int offset, int limit)` 추가
+
+```java
+package jpabook.jpashop.repository;
+
+import jpabook.jpashop.domain.Order;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+import org.springframework.util.StringUtils;
+
+import javax.persistence.EntityManager;
+import javax.persistence.TypedQuery;
+import javax.persistence.criteria.*;
+import java.util.ArrayList;
+import java.util.List;
+
+@Repository
+@RequiredArgsConstructor
+public class OrderRepository {
+
+    private final EntityManager em;
+
+    // ...
+
+    public List<Order> findAllWithMemberDelivery(int offset, int limit) {
+        return em.createQuery(
+                "select o from Order o" +
+                        " join fetch o.member m" +
+                        " join fetch o.delivery d", Order.class)
+                .setFirstResult(offset)
+                .setMaxResults(limit)
+                .getResultList();
+    }
+}
+
+```
+
+#### OrderApiController.java (추가) - V3.1: 지연 로딩 성능 최적화, 페이징 적용
+
+```java
+package jpabook.jpashop.api;
+
+import jpabook.jpashop.domain.Address;
+import jpabook.jpashop.domain.Order;
+import jpabook.jpashop.domain.OrderItem;
+import jpabook.jpashop.domain.OrderStatus;
+import jpabook.jpashop.repository.OrderRepository;
+import jpabook.jpashop.repository.OrderSearch;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequiredArgsConstructor
+public class OrderApiController {
+
+    private final OrderRepository orderRepository;
+
+    // ...
+
+    @GetMapping("/api/v3.1/orders")
+    public List<OrderDto> ordersV3_page(@RequestParam(value = "offset", defaultValue = "0") int offset,
+                                        @RequestParam(value = "limit", defaultValue = "100") int limit) {
+        return orderRepository.findAllWithMemberDelivery(offset, limit)
+                .stream()
+                .map(OrderDto::new)
+                .collect(Collectors.toList());
+    }
+
+    // ...
+}
+
+```
+
+#### application.yml (추가) - 최적화 옵션 추가
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:h2:tcp://localhost/~/jpashop;
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create
+    properties:
+      hibernate:
+        #        show_sql: true
+        format_sql: true
+        default_batch_fetch_size: 100 // 추가
+```
+
+* 개발로 설정하려면 `@BatchSize`를 적용하면 된다. (컬렉션은 컬렉션 필드에, 엔티티는 엔티티 클래스에 적용)
+
+* 장점
+    * 쿼리 호출 수가 `1 + N` -> `1 + 1`로 최적화 된다.
+    * 조인보다 DB 데이터 전송량이 최적화 된다. (`Order`와 `OrderItem`을 조인하면 `Order`가 `OrderItem`만큼 중복해서 조회된다. 이 방법은 각각 조회하므로 전송해야 할 중복
+      데이터가 없다.)
+    * 페치 조인 방식과 비교해서 쿼리 호출 수가 약간 증가하지만, DB 데이터 전송량이 감소한다.
+    * 컬렉션 페치 조인은 페이징이 불가능 하지만 이 방법은 페이징이 가능하다.
+
+* 결론
+    * ToOne 관계는 페치 조인해도 페이징에 영향을 주지 않는다. 따라서 ToOne 관계는 페치조인으로 쿼리 수를 줄여서 해결하고, 나머지는 `hibernate.default_batch_fetch_size`로
+      최적화 하자.
+
+> 참고        
+> `defalut_batch_fetch_size`의 크기는 적당한 사이즈를 골라야 하는데, 100 ~ 1000 사이를 선택하는 것을 권장한다. 이 전략을 SQL IN 절을 사용하는데, 데이터베이스에 따라 IN 절 파라미터를 1000으로 제한하기도 한다. 1000으로 잡으면 한번에 1000개를 DB에서 애플리케이션에 불러오므로 DB에 순간 부하가 증가할 수 있다. 하지만 애플리케이션은 100이든 1000이든 결국 전체 데이터를 로딩해야 하므로 메모리 사용량이 같다. 1000으로 설정하는 것이 성능상 가장 좋지만, 결국 DB든 애플리케이션이든 순간 부하를 어디까지 견딜 수 있는지로 결정하면 된다.
+
+> MTH       
+> fetch size를 설정한다는 것은 곧 DB에서 한번에 퍼올릴 데이터의 양을 설정하는 것이다. 그래서 강의에서도 fetch size를 100으로 설정하면 1000개의 데이터를 퍼올리기 위해 10번의 쿼리를 날린다고 설명한다.
+>
+> 페이징 기법을 위해서, 그리고 일대다, 다대다 관계 테이블의 조회에서 꼭 필요한 기법이다.        
+> 쿼리를 보면 테이블을 전혀 조인하지 않는다. 단지 `order`엔티티의 `order_id`를 받아서 `orderItem`의 소위 외래키에 해당하는 `order`객체의 `order_id`를 확인해서 같은 값이 존재하는 엔티티를 호출하는 방식인 `WHERE IN`방식으로 조회를 한다.         
+> 이 방법을 이용해서 JOIN으로 인한 데이터 중복(row갯수 증가)을 막고 내가 필요한 데이터만 알짜베기로 뽑아낼 수 있다. 단 전체 테이블을 페치조인 하는것 보다는 쿼리가 증가한다. 
+>
+>
+> 결론은 `ToOne = fetch join`, `ToMany = fetch size 설정 (WHERE IN)`
+
 ## Note
