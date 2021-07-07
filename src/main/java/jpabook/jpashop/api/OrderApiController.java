@@ -62,6 +62,11 @@ public class OrderApiController {
                 .collect(Collectors.toList());
     }
 
+    @GetMapping("/api/v4/orders")
+    public List<OrderQueryDto> ordersV4() {
+        return orderQueryRepository.findOrderQueryDtos();
+    }
+
     @Getter
     static class OrderDto {
 
@@ -82,11 +87,6 @@ public class OrderApiController {
                     .map(OrderItemDto::new)
                     .collect(Collectors.toList());
         }
-    }
-
-    @GetMapping("/api/v4/orders")
-    public List<OrderQueryDto> ordersV4() {
-        return orderQueryRepository.findOrderQueryDtos();
     }
 
     @Getter

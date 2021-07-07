@@ -393,9 +393,185 @@ spring:
 >
 > 페이징 기법을 위해서, 그리고 일대다, 다대다 관계 테이블의 조회에서 꼭 필요한 기법이다.        
 > 쿼리를 보면 테이블을 전혀 조인하지 않는다. 단지 `order`엔티티의 `order_id`를 받아서 `orderItem`의 소위 외래키에 해당하는 `order`객체의 `order_id`를 확인해서 같은 값이 존재하는 엔티티를 호출하는 방식인 `WHERE IN`방식으로 조회를 한다.         
-> 이 방법을 이용해서 JOIN으로 인한 데이터 중복(row갯수 증가)을 막고 내가 필요한 데이터만 알짜베기로 뽑아낼 수 있다. 단 전체 테이블을 페치조인 하는것 보다는 쿼리가 증가한다. 
+> 이 방법을 이용해서 JOIN으로 인한 데이터 중복(row갯수 증가)을 막고 내가 필요한 데이터만 알짜베기로 뽑아낼 수 있다. 단 전체 테이블을 페치조인 하는것 보다는 쿼리가 증가한다.
 >
 >
 > 결론은 `ToOne = fetch join`, `ToMany = fetch size 설정 (WHERE IN)`
+
+### 11-5. 주문 조회 V4: JPA에서 DTO 직접 조회
+
+#### OrderApiController.java (추가) - V4
+
+```java
+package jpabook.jpashop.api;
+
+import jpabook.jpashop.domain.Address;
+import jpabook.jpashop.domain.Order;
+import jpabook.jpashop.domain.OrderItem;
+import jpabook.jpashop.domain.OrderStatus;
+import jpabook.jpashop.repository.OrderRepository;
+import jpabook.jpashop.repository.OrderSearch;
+import jpabook.jpashop.repository.order.query.OrderQueryDto;
+import jpabook.jpashop.repository.order.query.OrderQueryRepository;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequiredArgsConstructor
+public class OrderApiController {
+
+    private final OrderRepository orderRepository;
+    private final OrderQueryRepository orderQueryRepository;
+
+    // ...
+
+    @GetMapping("/api/v4/orders")
+    public List<OrderQueryDto> ordersV4() {
+        return orderQueryRepository.findOrderQueryDtos();
+    }
+
+    // ...
+}
+
+```
+
+#### OrderQueryRepository.java - 특정 DTO에 종속적인 조회 메소드를 가지는 Repository 객체
+
+* `src/main/java/jpabook/jpashop/repository/order/query/OrderQueryRepository.java`
+
+```java
+package jpabook.jpashop.repository.order.query;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+import javax.persistence.EntityManager;
+import java.util.List;
+
+@Repository
+@RequiredArgsConstructor
+public class OrderQueryRepository {
+
+    private final EntityManager em;
+
+    public List<OrderQueryDto> findOrderQueryDtos() {
+        List<OrderQueryDto> result = findOrders();
+        result.forEach(o -> {
+            List<OrderItemQueryDto> orderItems = findOrderItems(o.getOrderId());
+            o.setOrderItems(orderItems);
+        });
+        return result;
+    }
+
+    private List<OrderItemQueryDto> findOrderItems(Long orderId) {
+        return em.createQuery(
+                "select new jpabook.jpashop.repository.order.query.OrderItemQueryDto(oi.order.id, i.name, oi.orderPrice, oi.count)" +
+                        " from OrderItem oi" +
+                        " join oi.item i" +
+                        " where oi.order.id = :orderId", OrderItemQueryDto.class)
+                .setParameter("orderId", orderId)
+                .getResultList();
+    }
+
+    private List<OrderQueryDto> findOrders() {
+        return em.createQuery(
+                "select new jpabook.jpashop.repository.order.query.OrderQueryDto(o.id, m.name, o.orderDate, o.status, d.address)" +
+                        " from Order o" +
+                        " join o.member m" +
+                        " join o.delivery d", OrderQueryDto.class)
+                .getResultList();
+    }
+}
+
+```
+
+#### OrderQueryDto.java - API 맟춤 DTO
+
+* `src/main/java/jpabook/jpashop/repository/order/query/OrderQueryDto.java`
+
+```java
+package jpabook.jpashop.repository.order.query;
+
+import jpabook.jpashop.domain.Address;
+import jpabook.jpashop.domain.OrderStatus;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Data
+public class OrderQueryDto {
+
+    private Long orderId;
+    private String name;
+    private LocalDateTime orderDate;
+    private OrderStatus orderStatus;
+    private Address address;
+    private List<OrderItemQueryDto> orderItems;
+
+    public OrderQueryDto(Long orderId, String name, LocalDateTime orderDate, OrderStatus orderStatus, Address address) {
+        this.orderId = orderId;
+        this.name = name;
+        this.orderDate = orderDate;
+        this.orderStatus = orderStatus;
+        this.address = address;
+    }
+}
+
+```
+
+#### OrderItemQueryDto.java - OrderQueryDto의 컬렉션 필드인 OrderItem을 받기 위한 DTO
+
+* `src/main/java/jpabook/jpashop/repository/order/query/OrderItemQueryDto.java`
+
+```java
+package jpabook.jpashop.repository.order.query;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.Data;
+
+@Data
+public class OrderItemQueryDto {
+
+    @JsonIgnore
+    private Long orderId;
+    private String itemName;
+    private int orderPrice;
+    private int count;
+
+    public OrderItemQueryDto(Long orderId, String itemName, int orderPrice, int count) {
+        this.orderId = orderId;
+        this.itemName = itemName;
+        this.orderPrice = orderPrice;
+        this.count = count;
+    }
+}
+
+```
+
+* Query: 루트 1번, 컬렉션 N번 실행
+* ToOne(N:1, 1:1) 관계들을 먼저 조회하고, ToMany(1:N)관계는 각각 별도로 처리한다.
+    * 이런 방식을 선택한 이유는 다음과 같다.
+    * ToOne 관계는 조인해도 데이터 row 수가 증가하지 않는다.
+    * ToMany(1:N)관계는 조인하면 row 수가 증가한다.
+* row 수가 증가하지 않는 ToOne 관계는 조인으로 최적화 하기 쉬우므로 한번에 조회하고, ToMany관계는 최적화 하기 어려우므로 `findOrderItems()`같은 별도의 메서드로 조회한다.
+
+> MTH   
+> JPA에서 DTO로 직접 조회하는 방식은 꽤나 복잡하다. 우선 API에 종속적인 DTO를 만들고, Repository가 API에 종속적으로 변하는 것을 막기 위해서 Repository 클래스를 따로 만들어 준다.
+>
+> DTO로 조회해야 하기 때문에 엔티티 형태 전체로 조회하는 방법과는 차이가 있다. 엔티티로 조회할때는 ToOne 관계에서는 페치조인을 사용해서 한번에 조회가 가능했지만 DTO로 조회할때는 일반 조인을 사용한다. (DTO에는 엔티티에 존재하는 Column이 존재하지 않을 수 있기 때문에... 확실하지는 않다)    
+> 그리고 일대다 관계는 따로 조회를 수행해야 한다. 소위 외래키에 해당하는 OrderItem테이블에 존재하는 Order 컬럼의 기본키를 확인한다. Order와 관계를 가지는 orderItem 엔티티를 모두 조회하고 order.setOrderItem()메소드로 세팅을 해준다.
+>
+> 강의 설명에서도 알수 있듯이 일대다 관계에서 조인을 수행하면 row 수가 조회된 엔티티 갯수만큼 증가하기 때문에 따로 조회를 수행했다. 하지만 이러한 방법도 order가 조회된 갯수만큼 orderItem을 조회하기 위한 쿼리가 생성된다. 즉 1 + N 문제가 발생하게 되는 것이다.
+>
+> 실제 위의 예제에서 order를 조회하기 위한 쿼리 1개, 그래고 order가 2개 조회되었다.   
+> 그리고 각 order와 관계를 가지는 orderItem을 찾기 위한 쿼리문이 조회된 order 엔티티 갯수인 2개만큼 생성된다. 총 3개의 쿼리가 발생한다.
 
 ## Note
