@@ -574,4 +574,120 @@ public class OrderItemQueryDto {
 > 실제 위의 예제에서 order를 조회하기 위한 쿼리 1개, 그래고 order가 2개 조회되었다.   
 > 그리고 각 order와 관계를 가지는 orderItem을 찾기 위한 쿼리문이 조회된 order 엔티티 갯수인 2개만큼 생성된다. 총 3개의 쿼리가 발생한다.
 
+### 11-6. 주문 조회 V5: JPA에서 DTO 직접 조회 - 컬렉션 조회 최적화
+
+#### OrderApiController.java (추가) - V5
+
+```java
+package jpabook.jpashop.api;
+
+import jpabook.jpashop.domain.Address;
+import jpabook.jpashop.domain.Order;
+import jpabook.jpashop.domain.OrderItem;
+import jpabook.jpashop.domain.OrderStatus;
+import jpabook.jpashop.repository.OrderRepository;
+import jpabook.jpashop.repository.OrderSearch;
+import jpabook.jpashop.repository.order.query.OrderQueryDto;
+import jpabook.jpashop.repository.order.query.OrderQueryRepository;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequiredArgsConstructor
+public class OrderApiController {
+
+    private final OrderRepository orderRepository;
+    private final OrderQueryRepository orderQueryRepository;
+
+    // ...
+
+    @GetMapping("/api/v5/orders")
+    public List<OrderQueryDto> orderV5() {
+        return orderQueryRepository.findAllByDto_optimization();
+    }
+}
+
+```
+
+#### OrderQueryRepository.java (추가)
+
+```java
+package jpabook.jpashop.repository.order.query;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+import javax.persistence.EntityManager;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Repository
+@RequiredArgsConstructor
+public class OrderQueryRepository {
+
+    private final EntityManager em;
+
+    // ...
+
+    public List<OrderQueryDto> findAllByDto_optimization() {
+        List<OrderQueryDto> result = findOrders();
+
+        Map<Long, List<OrderItemQueryDto>> orderItemMap = findOrderItemMap(toOrderIds(result));
+
+        result.forEach(o -> o.setOrderItems(orderItemMap.get(o.getOrderId())));
+
+        return result;
+    }
+
+    private Map<Long, List<OrderItemQueryDto>> findOrderItemMap(List<Long> orderIds) {
+        return em.createQuery(
+                "select new jpabook.jpashop.repository.order.query.OrderItemQueryDto(oi.order.id, i.name, oi.orderPrice, oi.count)" +
+                        " from OrderItem oi" +
+                        " join oi.item i" +
+                        " where oi.order.id in :orderId", OrderItemQueryDto.class)
+                .setParameter("orderId", orderIds)
+                .getResultList()
+                .stream()
+                .collect(Collectors.groupingBy(OrderItemQueryDto::getOrderId));
+    }
+
+    private List<Long> toOrderIds(List<OrderQueryDto> result) {
+        return result.stream()
+                .map(OrderQueryDto::getOrderId)
+                .collect(Collectors.toList());
+    }
+
+    private List<OrderQueryDto> findOrders() {
+        return em.createQuery(
+                "select new jpabook.jpashop.repository.order.query.OrderQueryDto(o.id, m.name, o.orderDate, o.status, d.address)" +
+                        " from Order o" +
+                        " join o.member m" +
+                        " join o.delivery d", OrderQueryDto.class)
+                .getResultList();
+    }
+}
+
+```
+
+* Query: 루트 1번, 컬렉션 1번
+* ToOne 관계들을 먼저 조회하고, 여기서 얻은 식별자 orderId로 ToMany 관계인 `OrderItem`을 한꺼번에 조회
+* Map을 사용해서 매칭 성능 향상(O(1))
+
+> MTH   
+> 쿼리를 줄이기 위한 아이디어는 간단하다. 각 `order`엔티티의 기본키에 해당하는 `id`를 모아 List에 저장한다. 그리고 `orderItem`엔티티를 조회할 때 `where in`문으로 리스트에 존재하는 `order`엔티티의 `id`를 가지고 있는 모든 `orderItem`엔티티를 한번에 찾는다.    
+> 각각의 `orderItem`을 찾는 것이 아니라 필요한 `orderItem`엔티티를 한번에 조회하는 것이다.    
+> 결과로 `orderItem`엔티티가 리스트 형태로 저장되어 있다. `orderItem`의 `order_id`를 key로 하여 Map에 매핑한다. 그리고 key와 `order`객체의 id를 매핑해서 `order`객체에 `orderItem`을 setting 한다.
+>
+> 결론적으로 쿼리문을 날리는 것보다 반복문을 더 도는게 효율적이다.    
+> 첫번째 반복문에서 해당하는 `orderItem`을 조회하는 것이 아닌 `orderId`만을 뽑아서 `where in`을 이용해서 한번에 필요한 모든 `orderItem`엔티티를 조회했다.    
+> 아마 쿼리문의 결과로 가지고 오는 데이터 양은 훨씬 늘어날 것 같다.
+
 ## Note
