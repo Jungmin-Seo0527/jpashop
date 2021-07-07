@@ -690,4 +690,150 @@ public class OrderQueryRepository {
 > 첫번째 반복문에서 해당하는 `orderItem`을 조회하는 것이 아닌 `orderId`만을 뽑아서 `where in`을 이용해서 한번에 필요한 모든 `orderItem`엔티티를 조회했다.    
 > 아마 쿼리문의 결과로 가지고 오는 데이터 양은 훨씬 늘어날 것 같다.
 
+### 11-7. 주문 조회 V6: JPA에서 DTO로 직접 조회, 플랫 데이터 최적화
+
+#### OrderFlatDto.java - 객체로 묶여있는 필드를 하나의 객체로 펼쳐서 몰아준다.
+
+* `src/main/java/jpabook/jpashop/repository/order/query/OrderFlatDto.java`
+
+```java
+package jpabook.jpashop.repository.order.query;
+
+import jpabook.jpashop.domain.Address;
+import jpabook.jpashop.domain.OrderStatus;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+@AllArgsConstructor
+public class OrderFlatDto {
+
+    private Long orderId;
+    private String name;
+    private LocalDateTime orderDate;
+    private OrderStatus orderStatus;
+    private Address address;
+
+    private String itemName;
+    private int orderPrice;
+    private int count;
+}
+
+```
+
+* 본래 `itemName`, `orderPrice`, `count`는 `orderItem`객체의 필드맴버였다.
+* 그리고 `orderItem`은 `List`로 묶여 있었다.
+* 이를 펼쳐버리고 후에 `Order`테이블과 `OrderItem`테이블을 조인 시킨다.
+* 일대다 관계이므로 `orderId`, `name`, `orderDat`, `orderStatus`, `address`가 중복되는 데이터가 존재한다.
+
+#### OrderQueryRepository.java (추가) - V6 조회
+
+```java
+package jpabook.jpashop.repository.order.query;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+import javax.persistence.EntityManager;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Repository
+@RequiredArgsConstructor
+public class OrderQueryRepository {
+
+    private final EntityManager em;
+
+    // ...
+
+    public List<OrderFlatDto> findAllByDto_flat() {
+        return em.createQuery(
+                "select new " +
+                        " jpabook.jpashop.repository.order.query.OrderFlatDto(o.id, m.name, o.orderDate, o.status, d.address, i.name, oi.orderPrice, oi.count)" +
+                        " from Order o" +
+                        " join o.member m" +
+                        " join o.delivery d" +
+                        " join o.orderItems oi " +
+                        " join oi.item i", OrderFlatDto.class)
+                .getResultList();
+    }
+}
+
+```
+
+* 연관되어 있는 모든 테이블을 조인시켜서 한번에 원하는 데이터를 조회한다.(무지성 조인...)
+
+#### OrderApiController.java (추가) - V6 OrderFlatDto -> OrderQueryDto 변환
+
+```java
+package jpabook.jpashop.api;
+
+import jpabook.jpashop.domain.Address;
+import jpabook.jpashop.domain.Order;
+import jpabook.jpashop.domain.OrderItem;
+import jpabook.jpashop.domain.OrderStatus;
+import jpabook.jpashop.repository.OrderRepository;
+import jpabook.jpashop.repository.OrderSearch;
+import jpabook.jpashop.repository.order.query.OrderItemQueryDto;
+import jpabook.jpashop.repository.order.query.OrderQueryDto;
+import jpabook.jpashop.repository.order.query.OrderQueryRepository;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static java.util.stream.Collectors.*;
+
+@RestController
+@RequiredArgsConstructor
+public class OrderApiController {
+
+    private final OrderRepository orderRepository;
+    private final OrderQueryRepository orderQueryRepository;
+
+    // ...
+
+    @GetMapping("/api/v6/orders")
+    public List<OrderQueryDto> orderV6() {
+        return orderQueryRepository.findAllByDto_flat()
+                .stream()
+                .collect(groupingBy(o -> new OrderQueryDto(o.getOrderId(),
+                                o.getName(), o.getOrderDate(), o.getOrderStatus(), o.getAddress()),
+                        mapping(o -> new OrderItemQueryDto(o.getOrderId(),
+                                o.getItemName(), o.getOrderPrice(), o.getCount()), toList())
+                ))
+                .entrySet()
+                .stream()
+                .map(e -> new OrderQueryDto(e.getKey().getOrderId(),
+                        e.getKey().getName(), e.getKey().getOrderDate(), e.getKey().getOrderStatus(),
+                        e.getKey().getAddress(), e.getValue()))
+                .collect(toList());
+    }
+}
+
+```
+
+* Query: 1번
+* 단점
+    * 쿼리는 한번이지만 조인으로 인해 DB에서 애플리케이션에 전달하는 데이터에 중복 데이터가 추가되므로 상황에 따라 V5 보다 더 느릴 수 도 있다.
+    * 애플리케이션에서 추가 작업이 크다.
+    * 페이징 불가능
+
+> MTH   
+> 플랫하게 데이터를 가져온다는 것은
+> 1. 객체로 묶여 있는 필드를 하나의 객체로 몰빵한다.
+> 2. 연관관계에 있는 테이블들을 모두 조인시킨다.
+> 3. 쿼리 한번에 필요한 데이터를 select 한다.
+>
+> List로 묶여있는 객체의 필드 변수들이 풀려버리므로 List 이외의 필드(속성값)들이 중복되는 데이터가 존재한다.
+>
+> 경우에 따라서 V5와 V6방식을 선택해서 사용한다고 한다. (개인적으로 V6는 무지성 조인 방식이라고 명명했다.)
+
 ## Note

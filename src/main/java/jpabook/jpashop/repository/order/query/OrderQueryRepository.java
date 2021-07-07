@@ -33,6 +33,18 @@ public class OrderQueryRepository {
         return result;
     }
 
+    public List<OrderFlatDto> findAllByDto_flat() {
+        return em.createQuery(
+                "select new " +
+                        " jpabook.jpashop.repository.order.query.OrderFlatDto(o.id, m.name, o.orderDate, o.status, d.address, i.name, oi.orderPrice, oi.count)" +
+                        " from Order o" +
+                        " join o.member m" +
+                        " join o.delivery d" +
+                        " join o.orderItems oi " +
+                        " join oi.item i", OrderFlatDto.class)
+                .getResultList();
+    }
+
     private Map<Long, List<OrderItemQueryDto>> findOrderItemMap(List<Long> orderIds) {
         return em.createQuery(
                 "select new jpabook.jpashop.repository.order.query.OrderItemQueryDto(oi.order.id, i.name, oi.orderPrice, oi.count)" +
@@ -67,18 +79,6 @@ public class OrderQueryRepository {
                         " from Order o" +
                         " join o.member m" +
                         " join o.delivery d", OrderQueryDto.class)
-                .getResultList();
-    }
-
-    public List<OrderFlatDto> findAllByDto_flat() {
-        return em.createQuery(
-                "select new " +
-                        " jpabook.jpashop.repository.order.query.OrderFlatDto(o.id, m.name, o.orderDate, o.status, d.address, i.name, oi.orderPrice, oi.count)" +
-                        " from Order o" +
-                        " join o.member m" +
-                        " join o.delivery d" +
-                        " join o.orderItems oi " +
-                        " join oi.item i", OrderFlatDto.class)
                 .getResultList();
     }
 }
