@@ -12,7 +12,7 @@
 * [6. 주문 도메인 개발](https://github.com/Jungmin-Seo0527/jpashop/blob/master/til/6.%20%EC%A3%BC%EB%AC%B8%20%EB%8F%84%EB%A9%94%EC%9D%B8%20%EA%B0%9C%EB%B0%9C.md)
 * [7. 웹 계층 개발](https://github.com/Jungmin-Seo0527/jpashop/blob/master/til/7.%20%EC%9B%B9%20%EA%B3%84%EC%B8%B5%20%EA%B0%9C%EB%B0%9C.md)
 
-### 실전! 스프링 부트와 JPA 활용2 - API 개발과 성능 최적화 (8장 ~ 14장)
+### 실전! 스프링 부트와 JPA 활용2 - API 개발과 성능 최적화 (8장 ~ 13장)
 
 * [8. API 개발 기본](https://github.com/Jungmin-Seo0527/jpashop/blob/master/til/8.%20API%20%EA%B0%9C%EB%B0%9C%20%EA%B8%B0%EB%B3%B8.md)
 * [9. API 개발 고급 - 준비](https://github.com/Jungmin-Seo0527/jpashop/blob/master/til/9.%20API%20%EA%B0%9C%EB%B0%9C%20%EA%B3%A0%EA%B8%89%20-%20%EC%A4%80%EB%B9%84.md)
